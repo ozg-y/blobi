@@ -1,0 +1,25 @@
+{
+  "name": "blobi",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BLOBI — a one-thumb pixel-art arcade game. Tap & hold to cloak and phase through monsters.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "cap:sync": "npm run build && cap sync",
+    "ios:open": "npm run build && cap sync ios && cap open ios"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.0",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/ios": "^6.2.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11"
+  }
+}

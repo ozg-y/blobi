@@ -1,0 +1,13 @@
+{
+  "appId": "com.mdpgroup.blobi",
+  "appName": "Blobi",
+  "webDir": "dist",
+  "backgroundColor": "#eef8ff",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#eef8ff"
+  },
+  "server": {
+    "iosScheme": "blobi"
+  }
+}

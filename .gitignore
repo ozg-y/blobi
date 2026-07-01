@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+
+# capacitor native platforms are generated; regenerate with `npx cap add ios`
+# (uncomment the next line if you prefer NOT to commit the native project)
+# ios/
+
+# iOS / Xcode local artifacts
+ios/App/Pods/
+ios/App/App/public/
+ios/DerivedData/
+*.xcuserstate
+
+# logs & misc
+npm-debug.log*
+.DS_Store
+.vite/
+
+# local, machine-specific Claude Code settings
+.claude/settings.local.json
