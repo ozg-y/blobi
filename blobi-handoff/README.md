@@ -80,8 +80,8 @@ On death:
   `TAP TO RETRY`. Tap restarts.
 
 ## 6. Scoring / UI
-- **Score = number of monsters successfully cleared.** HUD shows `SCORE` (top-left) and
-  `BEST` (top-right), pixel font.
+- **Score = how long you survive** (counted in whole seconds). HUD shows `SCORE`
+  (top-left) and `BEST` (top-right), pixel font.
 - Persist the high score locally (e.g. `localStorage`).
 - Optional difficulty ramp: increase blob speed and/or shrink the monster-spawn interval as
   score climbs.

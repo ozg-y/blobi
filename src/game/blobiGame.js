@@ -2,10 +2,9 @@
  * BLOBI: core game engine (framework-agnostic).
  *
  * A one-thumb pixel-art arcade game. A pink blob auto-drifts and bounces off the
- * walls. A small monster (GNASH) pops up. Tap & hold to cloak: the blob turns
- * invisible and phases through the monster, but stops bouncing and dies if it
- * drifts into a wall. Release before you hit an edge, and the passed monster
- * vanishes for a point.
+ * walls. Small monsters (GNASH) pop up. Tap & hold to cloak: the blob turns
+ * invisible and phases through them, but stops bouncing and dies if it drifts
+ * into a wall. Release before you hit an edge. Your score is how long you last.
  *
  * Rendering: the animated playfield (background gradient, dot texture, blob,
  * monster, shards) is painted straight onto the display canvas at full device
@@ -53,8 +52,8 @@ const COLORS = {
 // ---- Tuning knobs (spec section 9): everything balance-able lives here -----
 const TUNING = {
   // Speeds/sizes are fractions of the art-space HEIGHT so they scale with the screen.
-  blobBaseSpeed: 0.185, // fraction of art-height per second (a touch quicker for arcade feel)
-  speedRampPerPoint: 0.03, // +3% per monster cleared — a slow, gradual climb (no big jumps)
+  blobBaseSpeed: 0.2, // fraction of art-height per second (nudged up a touch)
+  speedRampPerSec: 0.012, // speed climbs slowly the longer you survive (per second alive)
   speedRampMax: 2.4, // cap the multiplier so it never gets impossible
   blobDrawR: 0.052, // physics radius (wall bounce / cloak-death boundary)
   blobHitR: 0.03, // forgiving hitbox for monster contact
@@ -118,6 +117,7 @@ export default class BlobiGame {
     this.state = STATE.TITLE
     this.best = this._loadBest()
     this.score = 0
+    this.survival = 0 // seconds survived this run (this IS the score)
 
     // Blob
     this.blob = { x: 0, y: 0, vx: 0, vy: 0, cloaked: false, squashX: 1, squashY: 1, dead: false }
@@ -219,6 +219,7 @@ export default class BlobiGame {
   _startPlay() {
     this.state = STATE.PLAY
     this.score = 0
+    this.survival = 0
     this.shards = []
     this.shakeT = 0
     this.monsters = []
@@ -266,9 +267,9 @@ export default class BlobiGame {
 
   // --- helpers --------------------------------------------------------------
   _speed() {
-    // Smooth, gradual ramp: the blob speeds up a little with every monster
-    // cleared, so the game tightens the more you pass (capped so it stays fair).
-    const mult = Math.min(TUNING.speedRampMax, 1 + TUNING.speedRampPerPoint * this.score)
+    // Smooth, gradual ramp: the blob speeds up a little the longer you survive,
+    // so the game tightens over time (capped so it stays fair).
+    const mult = Math.min(TUNING.speedRampMax, 1 + TUNING.speedRampPerSec * this.survival)
     return TUNING.blobBaseSpeed * this.AH * mult
   }
 
@@ -406,11 +407,15 @@ export default class BlobiGame {
 
     const b = this.blob
 
+    // Score IS how long you survive: count up in whole seconds while playing.
+    this.survival += dt
+    this.score = Math.floor(this.survival)
+
     // Ease squash back toward round.
     b.squashX += (1 - b.squashX) * Math.min(1, dt * 14)
     b.squashY += (1 - b.squashY) * Math.min(1, dt * 14)
 
-    // Keep speed in sync with the score ramp.
+    // Keep speed in sync with the survival-time ramp.
     this._rescaleVelocity()
 
     // Integrate.
@@ -477,9 +482,10 @@ export default class BlobiGame {
       }
 
       if (m.cleared) {
-        // Phased through AND now visible again → score and despawn this beast.
+        // Phased through AND now visible again → the beast you slipped past
+        // vanishes (no longer a threat). Scoring is time-based, so no point here;
+        // phasing is purely how you survive.
         this.monsters.splice(i, 1)
-        this.score += 1
         continue
       }
 
