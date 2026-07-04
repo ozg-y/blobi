@@ -2,6 +2,24 @@
   color-scheme: light;
 }
 
+/* Self-hosted pixel + UI fonts (bundled, so they work offline inside the
+   Capacitor iOS shell — no Google Fonts CDN at runtime). These are the exact
+   two typefaces from the original design mockup. */
+@font-face {
+  font-family: 'Press Start 2P';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('./assets/fonts/PressStart2P-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 700 800;
+  font-display: swap;
+  src: url('./assets/fonts/Nunito-latin.woff2') format('woff2');
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -30,4 +48,35 @@ body {
 #root {
   position: fixed;
   inset: 0;
+}
+
+/* --- UI overlay animations (mirrors the mockup) -------------------------- */
+@keyframes blobi-blink {
+  0%,
+  55%,
+  100% {
+    opacity: 1;
+  }
+  70%,
+  90% {
+    opacity: 0.12;
+  }
+}
+@keyframes blobi-shake {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0);
+  }
+  20% {
+    transform: translate(-4px, 2px) rotate(-4deg);
+  }
+  40% {
+    transform: translate(4px, -2px) rotate(4deg);
+  }
+  60% {
+    transform: translate(-3px, 2px) rotate(-3deg);
+  }
+  80% {
+    transform: translate(3px, -1px) rotate(3deg);
+  }
 }

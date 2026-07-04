@@ -7,9 +7,13 @@
  * drifts into a wall. Release before you hit an edge, and the passed monster
  * vanishes for a point.
  *
- * Rendering: the whole scene is drawn into a small low-resolution offscreen
- * buffer, then blitted to the display canvas with image smoothing OFF, giving an
- * authentic chunky pixel-art look at any device size.
+ * Rendering: the animated playfield (background gradient, dot texture, blob,
+ * monster, shards) is painted straight onto the display canvas at full device
+ * resolution with image smoothing OFF, so pixel-art sprites stay crisp and carry
+ * a hard plum drop-shadow — the "sticker" look from the design. All text (HUD,
+ * title, game-over) is NOT drawn here: the engine publishes its discrete UI state
+ * via `onState`, and the React shell renders that text with the real pixel font
+ * (Press Start 2P) so it is razor-sharp at any size, exactly like the mockup.
  *
  * The class is intentionally UI-framework-free so it can be mounted from React,
  * plain JS, or anything else. See components/GameCanvas.jsx for the React shell.
@@ -25,10 +29,12 @@ import gnashPng from '../assets/gnash.png'
 
 // ---- Palette (from the mockup / spec) ---------------------------------------
 const COLORS = {
-  bgTop: '#eef8ff',
+  bgTop: '#eef8ff', // mockup play gradient: #eef8ff → #e4f1ff → #e6ecff
+  bgMid: '#e4f1ff',
   bgBottom: '#e6ecff',
-  bgTopCloak: '#dbe8ff',
-  bgBottomCloak: '#c9d6f2',
+  bgTopCloak: '#dcebff', // cloak gradient: #dcebff → #dfe2ff (deepened, blind state)
+  bgBottomCloak: '#dfe2ff',
+  overDim: 'rgba(50,25,60,0.5)', // game-over dim (mockup)
   plum: '#6d2c52', // outlines
   pink: '#ff9fc9', // blob body
   pinkShade: '#f27ab0', // blob lower body / shading
@@ -76,9 +82,13 @@ export default class BlobiGame {
     this.display = displayCanvas
     this.dctx = displayCanvas.getContext('2d')
 
-    // Offscreen low-res buffer we actually paint into.
-    this.buffer = document.createElement('canvas')
-    this.bctx = this.buffer.getContext('2d')
+    // React (or any UI) subscribes here to render the crisp DOM overlay (HUD,
+    // title, game-over) with the real pixel font. The canvas only paints the
+    // animated playfield (background, sprites, shards); all text lives in the
+    // overlay so it stays razor-sharp at any device resolution — exactly like
+    // the design mockup, which is DOM/CSS text over the art.
+    this.onState = null
+    this._lastSnap = ''
 
     // Load the mockup sprites.
     const load = (src) => {
@@ -149,14 +159,18 @@ export default class BlobiGame {
     this.display.width = Math.floor(w * dpr)
     this.display.height = Math.floor(h * dpr)
 
-    // Art buffer keeps a fixed height; width follows the device aspect ratio.
+    // Physics runs in a fixed-height "art space" so tuning stays screen-independent;
+    // width follows the device aspect ratio.
     this.AH = TUNING.artHeight
     this.AW = Math.max(120, Math.round(this.AH * (w / h)))
-    this.buffer.width = this.AW
-    this.buffer.height = this.AH
+
+    // We draw straight to the display at full device resolution (no low-res blit),
+    // scaling art-space → device pixels. Sprites use nearest-neighbor so pixels
+    // stay crisp; text is handled by the DOM overlay. `scale` maps art px → device px.
+    this.dpr = dpr
+    this.scale = this.display.height / this.AH
 
     this.dctx.imageSmoothingEnabled = false
-    this.bctx.imageSmoothingEnabled = false
 
     // Keep entities inside the (possibly) new bounds.
     if (this.state !== STATE.TITLE) this._clampBlob()
@@ -229,7 +243,9 @@ export default class BlobiGame {
       this.best = this.score
       this._saveBest(this.best)
     }
-    this._spawnShards(this.blob.x, this.blob.y)
+    // Burst from the composed splat position (top-center) so the shards and the
+    // dead sprite read as one on the game-over screen.
+    this._spawnShards(this.AW * 0.5, this.AH * 0.3)
   }
 
   // --- helpers --------------------------------------------------------------
@@ -304,8 +320,23 @@ export default class BlobiGame {
       this._update(this.STEP)
       this.acc -= this.STEP
     }
+    this._syncState()
     this._render()
     requestAnimationFrame(this._frame)
+  }
+
+  // Push the discrete UI state (screen, score, best, cloak, retry-ready) to the
+  // subscriber only when it actually changes — so the React overlay re-renders a
+  // handful of times per game, not every frame.
+  _syncState() {
+    if (!this.onState) return
+    const canRetry =
+      this.state === STATE.GAMEOVER && this.time - this.gameOverAt >= TUNING.gameOverLockout
+    const cloaked = this.state === STATE.PLAY && this.blob.cloaked
+    const snap = `${this.state}|${this.score}|${this.best}|${cloaked ? 1 : 0}|${canRetry ? 1 : 0}`
+    if (snap === this._lastSnap) return
+    this._lastSnap = snap
+    this.onState({ state: this.state, score: this.score, best: this.best, cloaked, canRetry })
   }
 
   _update(dt) {
@@ -413,83 +444,101 @@ export default class BlobiGame {
   }
 
   // --- rendering ------------------------------------------------------------
+  // Everything is painted straight onto the display canvas at full device
+  // resolution. Sprites are drawn nearest-neighbor (crisp chunky pixels) and
+  // carry a hard plum drop-shadow so they read as stickers, just like the
+  // mockup. All text (HUD / title / game-over) is rendered by the DOM overlay.
   _render() {
-    const g = this.bctx
-    const W = this.AW
-    const H = this.AH
+    const g = this.dctx
+    const S = this.scale
+    const DW = this.display.width
+    const DH = this.display.height
     const cloaked = this.state === STATE.PLAY && this.blob.cloaked
 
     g.save()
+    g.imageSmoothingEnabled = false
 
-    // Screen shake offset.
+    // Screen shake offset (art px → device px).
     if (this.shakeT > 0) {
       const k = this.shakeT / TUNING.shakeTime
-      const ox = (Math.random() * 2 - 1) * TUNING.shakeMag * k
-      const oy = (Math.random() * 2 - 1) * TUNING.shakeMag * k
+      const ox = (Math.random() * 2 - 1) * TUNING.shakeMag * S * k
+      const oy = (Math.random() * 2 - 1) * TUNING.shakeMag * S * k
       g.translate(Math.round(ox), Math.round(oy))
     }
 
-    // Background gradient (deepens while cloaked).
-    const grad = g.createLinearGradient(0, 0, 0, H)
+    // Background gradient (deepens slightly while cloaked).
+    const grad = g.createLinearGradient(0, 0, 0, DH)
     grad.addColorStop(0, cloaked ? COLORS.bgTopCloak : COLORS.bgTop)
+    grad.addColorStop(0.6, cloaked ? COLORS.bgBottomCloak : COLORS.bgMid)
     grad.addColorStop(1, cloaked ? COLORS.bgBottomCloak : COLORS.bgBottom)
     g.fillStyle = grad
-    g.fillRect(-20, -20, W + 40, H + 40)
+    g.fillRect(-DW, -DH, DW * 3, DH * 3)
 
-    // Subtle pixel-grid dots for texture.
-    this._drawBackdropDots(g, W, H, cloaked)
+    // Soft white dot texture, matching the mockup's 18px pixel grid.
+    this._drawBackdropDots(g, DW, DH)
 
     // Monster (under the blob).
     if (this.monster) this._drawMonster(g, this.monster)
 
     // Blob (hidden entirely while cloaked — spec: no sprite, no trail, no ghost).
     if (this.state === STATE.TITLE) {
-      this._drawBlob(g, W * 0.5, H * 0.42, false, 1, 1)
+      this._drawBlob(g, this.AW * 0.5 * S, this.AH * 0.42 * S, false, 1, 1)
+    } else if (this.state === STATE.GAMEOVER) {
+      // Compose the splat top-center above the GAME OVER text (mockup layout),
+      // rather than wherever it happened to hit — keeps the screen clean.
+      this._drawBlob(g, this.AW * 0.5 * S, this.AH * 0.3 * S, true, 1, 1)
     } else if (!cloaked) {
       const b = this.blob
-      this._drawBlob(g, b.x, b.y, b.dead, b.squashX, b.squashY)
+      this._drawBlob(g, b.x * S, b.y * S, b.dead, b.squashX, b.squashY)
     }
 
     // Shards on top.
     for (const s of this.shards) {
       g.globalAlpha = clamp(s.life / s.max, 0, 1)
       g.fillStyle = s.color
-      g.fillRect(Math.round(s.x), Math.round(s.y), s.size, s.size)
+      const sz = Math.max(1, Math.round(s.size * S))
+      g.fillRect(Math.round(s.x * S), Math.round(s.y * S), sz, sz)
     }
     g.globalAlpha = 1
 
-    // HUD + screen text.
-    this._drawHud(g, W, H)
-
     g.restore()
 
-    // Blit low-res buffer → display, nearest-neighbor (chunky pixels).
-    this.dctx.imageSmoothingEnabled = false
-    this.dctx.clearRect(0, 0, this.display.width, this.display.height)
-    this.dctx.drawImage(this.buffer, 0, 0, this.display.width, this.display.height)
+    // Game-over dim (unaffected by shake, drawn last — text sits above via DOM).
+    if (this.state === STATE.GAMEOVER) {
+      g.fillStyle = COLORS.overDim
+      g.fillRect(0, 0, DW, DH)
+    }
   }
 
-  _drawBackdropDots(g, W, H, cloaked) {
-    g.fillStyle = cloaked ? 'rgba(109,44,82,0.06)' : 'rgba(109,44,82,0.045)'
-    const step = 12
-    for (let y = step; y < H; y += step) {
-      for (let x = step; x < W; x += step) {
-        g.fillRect(x, y, 1, 1)
+  _drawBackdropDots(g, DW, DH) {
+    const step = Math.max(8, Math.round(18 * this.dpr))
+    const r = Math.max(1, Math.round(1.6 * this.dpr))
+    g.fillStyle = 'rgba(255,255,255,0.45)'
+    for (let y = step; y < DH; y += step) {
+      for (let x = step; x < DW; x += step) {
+        g.fillRect(x, y, r, r)
       }
     }
   }
 
-  // Draw a sprite PNG centered at (cx,cy), scaled to a target height in art px,
-  // with crisp nearest-neighbor pixels. Returns silently until the image loads.
-  _drawSprite(g, img, cx, cy, targetH, sx = 1, sy = 1) {
+  // Draw a sprite PNG centered at device px (cx,cy), scaled to a target height in
+  // device px, crisp nearest-neighbor, with a hard offset drop-shadow (plum) so
+  // it looks like the mockup's stickers.
+  _drawSprite(g, img, cx, cy, targetH, sx = 1, sy = 1, shadow = true) {
     if (!img || !img.complete || !img.naturalWidth) return
     const scale = targetH / img.naturalHeight
     const w = img.naturalWidth * scale
     const h = img.naturalHeight * scale
     g.save()
+    g.imageSmoothingEnabled = false
+    if (shadow) {
+      g.shadowColor = 'rgba(109,44,82,0.22)'
+      g.shadowBlur = 0
+      g.shadowOffsetX = 3 * this.dpr
+      g.shadowOffsetY = 4 * this.dpr
+    }
     g.translate(cx, cy)
     g.scale(sx, sy)
-    g.imageSmoothingEnabled = false
     g.drawImage(img, -w / 2, -h / 2, w, h)
     g.restore()
   }
@@ -497,9 +546,9 @@ export default class BlobiGame {
   // Blobi — the real mockup sprite (alive, or the splat when dead).
   _drawBlob(g, cx, cy, dead, sx = 1, sy = 1) {
     if (dead) {
-      this._drawSprite(g, this.sprites.dead, cx, cy, TUNING.deadSpriteH * this.AH, 1, 1)
+      this._drawSprite(g, this.sprites.dead, cx, cy, TUNING.deadSpriteH * this.AH * this.scale, 1, 1)
     } else {
-      this._drawSprite(g, this.sprites.blob, cx, cy, TUNING.blobSpriteH * this.AH, sx, sy)
+      this._drawSprite(g, this.sprites.blob, cx, cy, TUNING.blobSpriteH * this.AH * this.scale, sx, sy)
     }
   }
 
@@ -508,65 +557,8 @@ export default class BlobiGame {
     const pop = clamp(m.tele / TUNING.spawnTelegraph, 0, 1)
     // Ease-out-back pop-in.
     const s = pop < 1 ? 1.7 * pop - 0.7 * pop * pop : 1
-    const targetH = TUNING.monsterSpriteH * this.AH
+    const targetH = TUNING.monsterSpriteH * this.AH * this.scale
     const bob = Math.sin(m.bob) * targetH * 0.05
-    this._drawSprite(g, this.sprites.gnash, m.x, m.y + bob, targetH, s, s)
-  }
-
-  // --- HUD & overlays -------------------------------------------------------
-  _pixelText(g, text, x, y, size, color, align = 'left', shadow = true) {
-    g.font = `bold ${size}px "Courier New", ui-monospace, monospace`
-    g.textAlign = align
-    g.textBaseline = 'middle'
-    g.lineWidth = 0
-    if (shadow) {
-      g.fillStyle = COLORS.hudShadow
-      g.fillText(text, x + 1, y + 1)
-    }
-    g.fillStyle = color
-    g.fillText(text, x, y)
-  }
-
-  // Stacked "LABEL / value" HUD block, like the mockup.
-  _hudStat(g, label, value, x, y, align) {
-    this._pixelText(g, label, x, y, 7, COLORS.hudText, align)
-    this._pixelText(g, String(value), x, y + 11, 15, COLORS.hudText, align)
-  }
-
-  _drawHud(g, W, H) {
-    // Approximate iOS safe-area top inset in art pixels.
-    const topPad = 12
-
-    if (this.state === STATE.PLAY || this.state === STATE.GAMEOVER) {
-      this._hudStat(g, 'SCORE', this.score, 6, topPad, 'left')
-      this._hudStat(g, 'BEST', this.best, W - 6, topPad, 'right')
-    }
-
-    if (this.state === STATE.TITLE) {
-      this._pixelText(g, 'BLOBI', W * 0.5, H * 0.6, 30, COLORS.plum, 'center')
-      this._pixelText(g, 'hold to cloak', W * 0.5, H * 0.69, 9, COLORS.cheek, 'center')
-      this._pixelText(g, 'phase past GNASH', W * 0.5, H * 0.725, 9, COLORS.cheek, 'center')
-      if (Math.floor(this.time * 1.6) % 2 === 0) {
-        this._pixelText(g, 'TAP TO START', W * 0.5, H * 0.84, 12, COLORS.plum, 'center')
-      }
-      this._pixelText(g, `BEST ${this.best}`, W * 0.5, H * 0.92, 9, COLORS.hudText, 'center')
-    }
-
-    if (this.state === STATE.GAMEOVER) {
-      // Dim overlay.
-      g.fillStyle = 'rgba(40,30,60,0.35)'
-      g.fillRect(-20, -20, W + 40, H + 40)
-
-      this._pixelText(g, 'GAME OVER', W * 0.5, H * 0.36, 18, '#ffffff', 'center')
-      this._pixelText(g, `SCORE ${this.score}`, W * 0.5, H * 0.45, 13, '#ffe3f1', 'center', false)
-      this._pixelText(g, `BEST ${this.best}`, W * 0.5, H * 0.51, 11, '#ffe3f1', 'center', false)
-
-      if (
-        this.time - this.gameOverAt >= TUNING.gameOverLockout &&
-        Math.floor(this.time * 1.6) % 2 === 0
-      ) {
-        this._pixelText(g, 'TAP TO RETRY', W * 0.5, H * 0.66, 13, '#ffffff', 'center', false)
-      }
-    }
+    this._drawSprite(g, this.sprites.gnash, m.x * this.scale, m.y * this.scale + bob, targetH, s, s)
   }
 }
