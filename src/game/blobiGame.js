@@ -67,10 +67,19 @@ const TUNING = {
   // have room to un-cloak and bounce without touching the wall OR re-touching it.
   spawnMargin: 0.28, // >= 28% from every edge
   spawnTelegraph: 0.28, // seconds of pop-in
-  monsterLifetime: 3.2, // an ignored monster wanders off after this and re-appears elsewhere
-  spawnDelayBase: 0.5, // pause before the next monster appears
-  spawnDelayMin: 0.22, // shrinks with score
-  relocateDelay: 0.35, // short beat before a fresh monster pops in after one leaves
+  // Several beasts share the screen at once. Their count drifts between the min
+  // and max as older ones wander off (each after a randomized lifetime) and new
+  // ones trickle in, so you usually face 2-4 at a time.
+  minMonsters: 2, // never fewer than this on screen
+  maxMonsters: 4, // never more than this on screen
+  monsterLifeMin: 3.0, // an ignored beast wanders off after a random time in this range
+  monsterLifeMax: 5.5,
+  spawnInterval: 0.9, // beat between adding beasts while under the max
+  refillInterval: 0.25, // faster top-up when below the minimum
+  // Separations are a fraction of art-height; kept modest so up to 4 beasts fit
+  // in the narrow portrait arena while never stacking on the blob or each other.
+  monsterGap: 0.14, // min separation between beasts
+  spawnClearOfBlob: 0.13, // never spawn a beast on top of the blob (reaction room)
   shakeTime: 0.5, // seconds of screen shake on death
   shakeMag: 5, // art-pixels of shake amplitude
   gameOverLockout: 0.6, // seconds before a retry tap is accepted
@@ -112,9 +121,9 @@ export default class BlobiGame {
 
     // Blob
     this.blob = { x: 0, y: 0, vx: 0, vy: 0, cloaked: false, squashX: 1, squashY: 1, dead: false }
-    // One monster at a time (spec).
-    this.monster = null
-    this.spawnTimer = TUNING.spawnDelayBase
+    // Several monsters share the arena at once (see TUNING.min/maxMonsters).
+    this.monsters = []
+    this.spawnTimer = 0
 
     // Input
     this.pointerDown = false
@@ -178,9 +187,9 @@ export default class BlobiGame {
 
     // Keep entities inside the (possibly) new bounds.
     if (this.state !== STATE.TITLE) this._clampBlob()
-    if (this.monster) {
-      this.monster.x = clamp(this.monster.x, this.AW * 0.1, this.AW * 0.9)
-      this.monster.y = clamp(this.monster.y, this.AH * 0.1, this.AH * 0.9)
+    for (const m of this.monsters) {
+      m.x = clamp(m.x, this.AW * 0.1, this.AW * 0.9)
+      m.y = clamp(m.y, this.AH * 0.1, this.AH * 0.9)
     }
   }
 
@@ -212,8 +221,8 @@ export default class BlobiGame {
     this.score = 0
     this.shards = []
     this.shakeT = 0
-    this.monster = null
-    this.spawnTimer = TUNING.spawnDelayBase
+    this.monsters = []
+    this.spawnTimer = TUNING.refillInterval
 
     const b = this.blob
     b.x = this.AW * 0.5
@@ -229,6 +238,9 @@ export default class BlobiGame {
     b.vx = Math.cos(angle) * sp
     b.vy = Math.sin(angle) * sp
 
+    // Start with the minimum number of beasts already on screen.
+    for (let i = 0; i < TUNING.minMonsters; i++) this._spawnMonster()
+
     // The tap that started the game must not also trigger a cloak.
     this.ignoreHoldUntilRelease = this.pointerDown
   }
@@ -237,7 +249,7 @@ export default class BlobiGame {
     if (this.blob.dead) return
     this.blob.dead = true
     this.blob.cloaked = false
-    this.monster = null // clear the arena for a clean game-over screen
+    this.monsters = [] // clear the arena for a clean game-over screen
     this.state = STATE.GAMEOVER
     this.gameOverAt = this.time
     this.shakeT = TUNING.shakeTime
@@ -247,9 +259,9 @@ export default class BlobiGame {
       this.best = this.score
       this._saveBest(this.best)
     }
-    // Burst from the composed dead-pose position (top-center) so the shards and
-    // the dead sprite read as one on the game-over screen.
-    this._spawnShards(this.AW * 0.5, this.AH * 0.3)
+    // Burst from the composed dead-pose position (high, above the text) so the
+    // shards and the dead sprite read as one on the game-over screen.
+    this._spawnShards(this.AW * 0.5, this.AH * 0.2)
   }
 
   // --- helpers --------------------------------------------------------------
@@ -276,10 +288,42 @@ export default class BlobiGame {
   }
 
   _spawnMonster() {
+    if (this.monsters.length >= TUNING.maxMonsters) return
     const mx = TUNING.spawnMargin
-    const x = this.AW * (mx + Math.random() * (1 - 2 * mx))
-    const y = this.AH * (mx + Math.random() * (1 - 2 * mx))
-    this.monster = { x, y, cleared: false, tele: 0, age: 0, bob: Math.random() * Math.PI * 2 }
+    const gap = TUNING.monsterGap * this.AH
+    const clearBlob = TUNING.spawnClearOfBlob * this.AH
+    // Try a few random spots; take the first that is clear of the blob and well
+    // separated from the other beasts. If the arena is too crowded, skip this
+    // spawn and try again next tick (never stack two beasts on the same spot).
+    let pos = null
+    for (let attempt = 0; attempt < 24; attempt++) {
+      const x = this.AW * (mx + Math.random() * (1 - 2 * mx))
+      const y = this.AH * (mx + Math.random() * (1 - 2 * mx))
+      if (this.state === STATE.PLAY && Math.hypot(x - this.blob.x, y - this.blob.y) < clearBlob) continue
+      let ok = true
+      for (const m of this.monsters) {
+        if (Math.hypot(x - m.x, y - m.y) < gap) {
+          ok = false
+          break
+        }
+      }
+      if (ok) {
+        pos = { x, y }
+        break
+      }
+    }
+    if (!pos) return
+    const life =
+      TUNING.monsterLifeMin + Math.random() * (TUNING.monsterLifeMax - TUNING.monsterLifeMin)
+    this.monsters.push({
+      x: pos.x,
+      y: pos.y,
+      cleared: false,
+      tele: 0,
+      age: 0,
+      life,
+      bob: Math.random() * Math.PI * 2,
+    })
   }
 
   _spawnShards(x, y) {
@@ -415,50 +459,52 @@ export default class BlobiGame {
       void bounced
     }
 
-    // Monster lifecycle.
-    if (this.monster) {
-      const m = this.monster
+    // Monsters: several share the arena at once. Each ages, roams and scores
+    // independently. Iterate backwards so we can splice despawns safely.
+    const hitR = TUNING.blobHitR * this.AH + TUNING.monsterHitR * this.AH
+    for (let i = this.monsters.length - 1; i >= 0; i--) {
+      const m = this.monsters[i]
       if (m.tele < TUNING.spawnTelegraph) m.tele += dt
       m.bob += dt * 3
       const fullyPresent = m.tele >= TUNING.spawnTelegraph
+      const overlapping = Math.hypot(b.x - m.x, b.y - m.y) < hitR
 
-      const dist = Math.hypot(b.x - m.x, b.y - m.y)
-      const hitR = TUNING.blobHitR * this.AH + TUNING.monsterHitR * this.AH
-      const overlapping = dist < hitR
+      if (b.cloaked) {
+        // Phasing through while invisible: mark cleared, but do NOT remove yet
+        // (and don't age while the blob is mid-phase).
+        if (overlapping) m.cleared = true
+        continue
+      }
 
-      // An ignored monster does not sit forever: once it is fully present and the
-      // blob is visible (not mid-phase), it ages, then wanders off so a new one
-      // can pop up somewhere else. This keeps the beasts constantly moving around.
-      if (fullyPresent && !m.cleared && !b.cloaked) {
+      if (m.cleared) {
+        // Phased through AND now visible again → score and despawn this beast.
+        this.monsters.splice(i, 1)
+        this.score += 1
+        continue
+      }
+
+      if (overlapping && fullyPresent) {
+        // Touched a fully-present beast while visible → death.
+        this._die()
+        return
+      }
+
+      // An ignored beast does not sit forever: it ages, then wanders off so a
+      // fresh one can pop up elsewhere. Beasts get randomized lifetimes, so the
+      // on-screen count keeps drifting between the min and max.
+      if (fullyPresent) {
         m.age += dt
-        if (m.age >= TUNING.monsterLifetime) {
-          this.monster = null
-          this.spawnTimer = TUNING.relocateDelay
-        }
+        if (m.age >= m.life) this.monsters.splice(i, 1)
       }
+    }
 
-      if (this.monster) {
-        if (b.cloaked) {
-          // Phasing through while invisible: mark cleared, but do NOT remove yet.
-          if (overlapping) m.cleared = true
-        } else if (m.cleared) {
-          // Passed through AND now visible again → score and despawn, then queue
-          // the next monster (a little sooner as the score climbs).
-          this.monster = null
-          this.score += 1
-          this.spawnTimer = Math.max(
-            TUNING.spawnDelayMin,
-            TUNING.spawnDelayBase - this.score * 0.02,
-          )
-        } else if (overlapping && fullyPresent) {
-          // Touched a fully-present monster while visible → death.
-          this._die()
-          return
-        }
-      }
-    } else {
-      this.spawnTimer -= dt
-      if (this.spawnTimer <= 0) this._spawnMonster()
+    // Keep the arena populated: always at least the minimum, trickling up to the
+    // maximum. Refill quickly when we've dropped below the minimum.
+    this.spawnTimer -= dt
+    if (this.monsters.length < TUNING.maxMonsters && this.spawnTimer <= 0) {
+      this._spawnMonster()
+      this.spawnTimer =
+        this.monsters.length < TUNING.minMonsters ? TUNING.refillInterval : TUNING.spawnInterval
     }
   }
 
@@ -496,16 +542,16 @@ export default class BlobiGame {
     // Soft white dot texture, matching the mockup's 18px pixel grid.
     this._drawBackdropDots(g, DW, DH)
 
-    // Monster (under the blob).
-    if (this.monster) this._drawMonster(g, this.monster)
+    // Monsters (under the blob).
+    for (const m of this.monsters) this._drawMonster(g, m)
 
     // Blob (hidden entirely while cloaked; spec: no sprite, no trail, no ghost).
     if (this.state === STATE.TITLE) {
       this._drawBlob(g, this.AW * 0.5 * S, this.AH * 0.42 * S, false, 1, 1)
     } else if (this.state === STATE.GAMEOVER) {
-      // Compose the dead blob top-center above the GAME OVER text (mockup layout),
-      // rather than wherever it happened to hit, keeps the screen clean.
-      this._drawBlob(g, this.AW * 0.5 * S, this.AH * 0.3 * S, true, 1, 1)
+      // Compose the dead blob high on the screen so it sits ABOVE the GAME OVER
+      // text (never behind it), rather than wherever it happened to hit.
+      this._drawBlob(g, this.AW * 0.5 * S, this.AH * 0.2 * S, true, 1, 1)
     } else if (!cloaked) {
       const b = this.blob
       this._drawBlob(g, b.x * S, b.y * S, b.dead, b.squashX, b.squashY)

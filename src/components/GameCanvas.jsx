@@ -235,8 +235,9 @@ function GameOver({ score, best, canRetry }) {
         position: 'absolute',
         left: 0,
         right: 0,
-        top: '50%',
-        transform: 'translateY(-50%)',
+        // Sit below the dead blob (drawn high on the canvas) so text is never
+        // behind the sprite.
+        top: '40%',
         textAlign: 'center',
         padding: '0 18px',
       }}
