@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import BlobiGame from '../game/blobiGame.js'
 
-// Fonts (self-hosted, see index.css) — the two typefaces from the design mockup.
+// Fonts (self-hosted, see index.css): the two typefaces from the design mockup.
 const PIX = "'Press Start 2P', ui-monospace, monospace"
 const UI = "'Nunito', -apple-system, BlinkMacSystemFont, sans-serif"
 
@@ -10,7 +10,7 @@ const UI = "'Nunito', -apple-system, BlinkMacSystemFont, sans-serif"
  *
  * The engine runs its own requestAnimationFrame loop and paints the animated
  * playfield (background, blob, monster, shards) to the <canvas>. React owns the
- * crisp text overlay — HUD, title and game-over — rendered with the real pixel
+ * crisp text overlay (HUD, title and game-over) rendered with the real pixel
  * font so it stays razor-sharp at any device resolution, exactly like the design
  * mockup (which is DOM/CSS text layered over the art). The engine pushes its
  * discrete UI state up through `game.onState`; gameplay stays 100% in the engine.
@@ -206,7 +206,7 @@ function Title({ best }) {
           margin: '0 auto clamp(30px, 9vw, 48px)',
         }}
       >
-        Tap &amp; hold to turn invisible and phase past the beasts — but you go
+        Tap &amp; hold to turn invisible and phase past the beasts. You go
         blind and can&apos;t bounce off walls.
       </div>
       <div

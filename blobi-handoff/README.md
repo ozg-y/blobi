@@ -1,8 +1,8 @@
-# BLOBI — Game Spec
+# BLOBI: Game Spec
 
 A one-thumb mobile arcade game. A little pink pixel-art blob drifts around the
 screen and bounces off the walls. Small toothy monsters pop up. **Tap & hold to turn the
-blob invisible so it can phase through a monster** — but while cloaked the blob is blind:
+blob invisible so it can phase through a monster**: but while cloaked the blob is blind:
 it stops bouncing and dies if it drifts into a wall. Time your cloak, slip past the
 monster, then release before you hit an edge.
 
@@ -12,7 +12,7 @@ this spec. Build the playable game from the rules below.
 ---
 
 ## 1. Format & feel
-- **Portrait** mobile (single vertical playfield). No scrolling — the whole arena is one screen.
+- **Portrait** mobile (single vertical playfield). No scrolling, the whole arena is one screen.
 - **Pixel art**, `image-rendering: pixelated`, integer scaling. Everything is drawn on a pixel grid.
 - **Soft pastel palette on a very light BABY-BLUE background** (`#eef8ff`→`#e6ecff`), deep
   plum outlines (`#6d2c52`). The pink blob and the purple monster pop against the blue.
@@ -20,11 +20,11 @@ this spec. Build the playable game from the rules below.
 - Cute but readable at small sizes.
 
 ## 2. Blobi (player)
-- **Round & squishy — like a piece of bubblegum, NOT a perfect ball, but not wildly lumpy
+- **Round & squishy, like a piece of bubblegum, NOT a perfect ball, but not wildly lumpy
   either.** Pink pixel body with stubby arms + feet, two big shiny eyes, blush cheeks, a
-  tiny mouth. (Original design — deliberately un-Kirby.)
+  tiny mouth. (Original design, deliberately un-Kirby.)
 - **Death pose = a SPLAT.** When Blobi dies it flattens into a wide, melty puddle shape with
-  `x x` cross-eyes (see the mockup's dead sprite). Same pink palette — just the squashed
+  `x x` cross-eyes (see the mockup's dead sprite). Same pink palette, just the squashed
   silhouette + x x eyes.
 - The blob has a fixed radius/hitbox smaller than its drawn bounds (forgiving).
 
@@ -35,18 +35,18 @@ this spec. Build the playable game from the rules below.
 - Suggested start speed ≈ 3–4% of screen height per second; ramp up slowly with score.
 
 ## 3. The monster (obstacle)
-- **GNASH** — one monster type: a small horned purple biter with four white fangs and angry
+- **GNASH**: one monster type: a small horned purple biter with four white fangs and angry
   brows. **Smaller than Blobi.** See the mockup for the exact look.
 - It sits still (gentle idle bob only). It does not chase.
 
-### Spawn rules — IMPORTANT
+### Spawn rules (IMPORTANT)
 - **One monster at a time** (or a small max; tune later).
 - A monster spawns at a random point **but never near a corner or edge**. Keep it inside a
   safe margin (e.g. ≥ 20% of screen width/height from every edge). This guarantees the player
   always has room to *un-cloak and bounce* right after passing it.
 - Give a short telegraph (pop-in / scale-up) so the player can react.
 
-### Despawn rule — IMPORTANT
+### Despawn rule (IMPORTANT)
 - A monster disappears **only after the blob has fully passed through/over it AND the blob is
   visible again.** 
 - Concretely: mark the monster `cleared = true` the moment the (invisible) blob overlaps it.
@@ -57,10 +57,10 @@ this spec. Build the playable game from the rules below.
 ## 4. Cloak mechanic (the core input)
 - **Input:** touch-and-hold anywhere on the screen. Press = cloak on, release = cloak off.
 - **While cloaked:**
-  - The blob is **fully invisible** — no sprite, no trail, no ghost. (Hard mode: the player
-    tracks it from memory.) *(The mockup shows a dashed outline only to explain the idea —
+  - The blob is **fully invisible**: no sprite, no trail, no ghost. (Hard mode: the player
+    tracks it from memory.) *(The mockup shows a dashed outline only to explain the idea , 
     do NOT render that in the real game.)*
-  - The blob **phases through monsters** — no death on monster contact.
+  - The blob **phases through monsters**: no death on monster contact.
   - The blob **does NOT bounce off walls.** It keeps its velocity and, if it reaches a wall,
     it **dies** (it would "leave" the arena). So you can't stay cloaked forever.
 - **On release:** blob becomes visible again and resumes normal wall-bouncing.
@@ -87,9 +87,9 @@ On death:
   score climbs.
 
 ## 7. Screens / states
-1. **PLAY** — HUD + blob bouncing + monsters spawning. (Add a lightweight title/start state.)
-2. **CLOAKED** — same as play but blob hidden while the finger is down.
-3. **GAME OVER** — dim overlay, dead blob (`x x`), score/best, blinking retry.
+1. **PLAY**: HUD + blob bouncing + monsters spawning. (Add a lightweight title/start state.)
+2. **CLOAKED**: same as play but blob hidden while the finger is down.
+3. **GAME OVER**: dim overlay, dead blob (`x x`), score/best, blinking retry.
 
 ## 8. Suggested tech
 - Single `<canvas>` game loop (`requestAnimationFrame`), fixed-timestep update.
@@ -113,5 +113,5 @@ On death:
 ## 10. Asset reference
 Open `Peek-a-Blob Mockups.dc.html` in a browser for the visual target: the 3 gameplay
 screens (play / cloak / game-over), Blobi (alive + splat-dead), and the GNASH monster. The
-sprites there are generated procedurally in the file's logic — reuse the shapes/palette or
+sprites there are generated procedurally in the file's logic, reuse the shapes/palette or
 redraw as a spritesheet.

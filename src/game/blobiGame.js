@@ -1,5 +1,5 @@
 /**
- * BLOBI — core game engine (framework-agnostic).
+ * BLOBI: core game engine (framework-agnostic).
  *
  * A one-thumb pixel-art arcade game. A pink blob auto-drifts and bounces off the
  * walls. A small monster (GNASH) pops up. Tap & hold to cloak: the blob turns
@@ -10,7 +10,7 @@
  * Rendering: the animated playfield (background gradient, dot texture, blob,
  * monster, shards) is painted straight onto the display canvas at full device
  * resolution with image smoothing OFF, so pixel-art sprites stay crisp and carry
- * a hard plum drop-shadow — the "sticker" look from the design. All text (HUD,
+ * a hard plum drop-shadow, the "sticker" look from the design. All text (HUD,
  * title, game-over) is NOT drawn here: the engine publishes its discrete UI state
  * via `onState`, and the React shell renders that text with the real pixel font
  * (Press Start 2P) so it is razor-sharp at any size, exactly like the mockup.
@@ -18,7 +18,7 @@
  * The class is intentionally UI-framework-free so it can be mounted from React,
  * plain JS, or anything else. See components/GameCanvas.jsx for the React shell.
  *
- * Sprites: the exact pixel-art PNGs from the original mockup (Blobi alive/splat,
+ * Sprites: the exact pixel-art PNGs from the original mockup (Blobi alive/dead,
  * GNASH) are drawn with image smoothing OFF so they look identical to the design.
  */
 
@@ -50,27 +50,31 @@ const COLORS = {
   hudShadow: '#ffffff',
 }
 
-// ---- Tuning knobs (spec section 9) — everything balance-able lives here ------
+// ---- Tuning knobs (spec section 9): everything balance-able lives here -----
 const TUNING = {
-  // Speeds/sizes are fractions of the art-buffer HEIGHT so they scale with the screen.
-  blobBaseSpeed: 0.17, // fraction of art-height per second (spec suggests ~0.04; bumped for arcade feel)
-  speedRampPer5: 0.05, // +5% every 5 points
-  speedRampMax: 2.2, // cap the multiplier so it never gets impossible
+  // Speeds/sizes are fractions of the art-space HEIGHT so they scale with the screen.
+  blobBaseSpeed: 0.185, // fraction of art-height per second (a touch quicker for arcade feel)
+  speedRampPerPoint: 0.03, // +3% per monster cleared — a slow, gradual climb (no big jumps)
+  speedRampMax: 2.4, // cap the multiplier so it never gets impossible
   blobDrawR: 0.052, // physics radius (wall bounce / cloak-death boundary)
-  blobHitR: 0.032, // forgiving hitbox for monster contact
-  monsterHitR: 0.03, // monster contact hitbox
+  blobHitR: 0.03, // forgiving hitbox for monster contact
+  monsterHitR: 0.028, // monster contact hitbox
   // Sprite draw sizes, as a fraction of art-height (the PNGs have transparent margins).
   blobSpriteH: 0.15,
   deadSpriteH: 0.16,
   monsterSpriteH: 0.135,
-  spawnMargin: 0.2, // >= 20% from every edge
+  // Keep monsters well clear of the walls so that after you phase one you still
+  // have room to un-cloak and bounce without touching the wall OR re-touching it.
+  spawnMargin: 0.28, // >= 28% from every edge
   spawnTelegraph: 0.28, // seconds of pop-in
-  spawnDelayBase: 0.55, // pause before the next monster appears
-  spawnDelayMin: 0.25, // shrinks with score
+  monsterLifetime: 3.2, // an ignored monster wanders off after this and re-appears elsewhere
+  spawnDelayBase: 0.5, // pause before the next monster appears
+  spawnDelayMin: 0.22, // shrinks with score
+  relocateDelay: 0.35, // short beat before a fresh monster pops in after one leaves
   shakeTime: 0.5, // seconds of screen shake on death
   shakeMag: 5, // art-pixels of shake amplitude
   gameOverLockout: 0.6, // seconds before a retry tap is accepted
-  artHeight: 260, // low-res buffer height in "art pixels"
+  artHeight: 260, // art-space height in "art pixels"
 }
 
 const STATE = { TITLE: 'TITLE', PLAY: 'PLAY', GAMEOVER: 'GAMEOVER' }
@@ -85,7 +89,7 @@ export default class BlobiGame {
     // React (or any UI) subscribes here to render the crisp DOM overlay (HUD,
     // title, game-over) with the real pixel font. The canvas only paints the
     // animated playfield (background, sprites, shards); all text lives in the
-    // overlay so it stays razor-sharp at any device resolution — exactly like
+    // overlay so it stays razor-sharp at any device resolution, exactly like
     // the design mockup, which is DOM/CSS text over the art.
     this.onState = null
     this._lastSnap = ''
@@ -243,14 +247,16 @@ export default class BlobiGame {
       this.best = this.score
       this._saveBest(this.best)
     }
-    // Burst from the composed splat position (top-center) so the shards and the
-    // dead sprite read as one on the game-over screen.
+    // Burst from the composed dead-pose position (top-center) so the shards and
+    // the dead sprite read as one on the game-over screen.
     this._spawnShards(this.AW * 0.5, this.AH * 0.3)
   }
 
   // --- helpers --------------------------------------------------------------
   _speed() {
-    const mult = Math.min(TUNING.speedRampMax, 1 + TUNING.speedRampPer5 * Math.floor(this.score / 5))
+    // Smooth, gradual ramp: the blob speeds up a little with every monster
+    // cleared, so the game tightens the more you pass (capped so it stays fair).
+    const mult = Math.min(TUNING.speedRampMax, 1 + TUNING.speedRampPerPoint * this.score)
     return TUNING.blobBaseSpeed * this.AH * mult
   }
 
@@ -273,7 +279,7 @@ export default class BlobiGame {
     const mx = TUNING.spawnMargin
     const x = this.AW * (mx + Math.random() * (1 - 2 * mx))
     const y = this.AH * (mx + Math.random() * (1 - 2 * mx))
-    this.monster = { x, y, cleared: false, tele: 0, bob: Math.random() * Math.PI * 2 }
+    this.monster = { x, y, cleared: false, tele: 0, age: 0, bob: Math.random() * Math.PI * 2 }
   }
 
   _spawnShards(x, y) {
@@ -326,7 +332,7 @@ export default class BlobiGame {
   }
 
   // Push the discrete UI state (screen, score, best, cloak, retry-ready) to the
-  // subscriber only when it actually changes — so the React overlay re-renders a
+  // subscriber only when it actually changes, so the React overlay re-renders a
   // handful of times per game, not every frame.
   _syncState() {
     if (!this.onState) return
@@ -414,24 +420,37 @@ export default class BlobiGame {
       const m = this.monster
       if (m.tele < TUNING.spawnTelegraph) m.tele += dt
       m.bob += dt * 3
+      const fullyPresent = m.tele >= TUNING.spawnTelegraph
 
       const dist = Math.hypot(b.x - m.x, b.y - m.y)
       const hitR = TUNING.blobHitR * this.AH + TUNING.monsterHitR * this.AH
       const overlapping = dist < hitR
 
-      if (b.cloaked) {
-        // Phasing through: mark cleared, but do NOT remove yet.
-        if (overlapping) m.cleared = true
-      } else {
-        if (m.cleared) {
-          // Passed through AND now visible again → score and despawn.
+      // An ignored monster does not sit forever: once it is fully present and the
+      // blob is visible (not mid-phase), it ages, then wanders off so a new one
+      // can pop up somewhere else. This keeps the beasts constantly moving around.
+      if (fullyPresent && !m.cleared && !b.cloaked) {
+        m.age += dt
+        if (m.age >= TUNING.monsterLifetime) {
+          this.monster = null
+          this.spawnTimer = TUNING.relocateDelay
+        }
+      }
+
+      if (this.monster) {
+        if (b.cloaked) {
+          // Phasing through while invisible: mark cleared, but do NOT remove yet.
+          if (overlapping) m.cleared = true
+        } else if (m.cleared) {
+          // Passed through AND now visible again → score and despawn, then queue
+          // the next monster (a little sooner as the score climbs).
           this.monster = null
           this.score += 1
           this.spawnTimer = Math.max(
             TUNING.spawnDelayMin,
             TUNING.spawnDelayBase - this.score * 0.02,
           )
-        } else if (overlapping && m.tele >= TUNING.spawnTelegraph * 0.5) {
+        } else if (overlapping && fullyPresent) {
           // Touched a fully-present monster while visible → death.
           this._die()
           return
@@ -480,12 +499,12 @@ export default class BlobiGame {
     // Monster (under the blob).
     if (this.monster) this._drawMonster(g, this.monster)
 
-    // Blob (hidden entirely while cloaked — spec: no sprite, no trail, no ghost).
+    // Blob (hidden entirely while cloaked; spec: no sprite, no trail, no ghost).
     if (this.state === STATE.TITLE) {
       this._drawBlob(g, this.AW * 0.5 * S, this.AH * 0.42 * S, false, 1, 1)
     } else if (this.state === STATE.GAMEOVER) {
-      // Compose the splat top-center above the GAME OVER text (mockup layout),
-      // rather than wherever it happened to hit — keeps the screen clean.
+      // Compose the dead blob top-center above the GAME OVER text (mockup layout),
+      // rather than wherever it happened to hit, keeps the screen clean.
       this._drawBlob(g, this.AW * 0.5 * S, this.AH * 0.3 * S, true, 1, 1)
     } else if (!cloaked) {
       const b = this.blob
@@ -503,7 +522,7 @@ export default class BlobiGame {
 
     g.restore()
 
-    // Game-over dim (unaffected by shake, drawn last — text sits above via DOM).
+    // Game-over dim (unaffected by shake, drawn last; text sits above via DOM).
     if (this.state === STATE.GAMEOVER) {
       g.fillStyle = COLORS.overDim
       g.fillRect(0, 0, DW, DH)
@@ -543,7 +562,7 @@ export default class BlobiGame {
     g.restore()
   }
 
-  // Blobi — the real mockup sprite (alive, or the splat when dead).
+  // Blobi: the real mockup sprite (alive, or the dead pose).
   _drawBlob(g, cx, cy, dead, sx = 1, sy = 1) {
     if (dead) {
       this._drawSprite(g, this.sprites.dead, cx, cy, TUNING.deadSpriteH * this.AH * this.scale, 1, 1)
@@ -552,7 +571,7 @@ export default class BlobiGame {
     }
   }
 
-  // GNASH — the real mockup sprite, with a pop-in scale and gentle idle bob.
+  // GNASH: the real mockup sprite, with a pop-in scale and gentle idle bob.
   _drawMonster(g, m) {
     const pop = clamp(m.tele / TUNING.spawnTelegraph, 0, 1)
     // Ease-out-back pop-in.

@@ -2,7 +2,7 @@
   "name": "blobi",
   "version": "1.0.0",
   "private": true,
-  "description": "BLOBI — a one-thumb pixel-art arcade game. Tap & hold to cloak and phase through monsters.",
+  "description": "BLOBI: a one-thumb pixel-art arcade game. Tap & hold to cloak and phase through monsters.",
   "type": "module",
   "scripts": {
     "dev": "vite",
