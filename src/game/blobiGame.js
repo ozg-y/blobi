@@ -57,11 +57,11 @@ const TUNING = {
   speedRampMax: 2.4, // cap the multiplier so it never gets impossible
   blobDrawR: 0.052, // physics radius (wall bounce / cloak-death boundary)
   blobHitR: 0.03, // forgiving hitbox for monster contact
-  monsterHitR: 0.028, // monster contact hitbox
+  monsterHitR: 0.024, // monster contact hitbox (kept in step with the smaller sprite)
   // Sprite draw sizes, as a fraction of art-height (the PNGs have transparent margins).
   blobSpriteH: 0.15,
   deadSpriteH: 0.16,
-  monsterSpriteH: 0.135,
+  monsterSpriteH: 0.11, // clearly smaller than Blobi (spec: beasts are smaller)
   // Keep monsters well clear of the walls so that after you phase one you still
   // have room to un-cloak and bounce without touching the wall OR re-touching it.
   spawnMargin: 0.28, // >= 28% from every edge
@@ -553,7 +553,7 @@ export default class BlobiGame {
 
     // Blob (hidden entirely while cloaked; spec: no sprite, no trail, no ghost).
     if (this.state === STATE.TITLE) {
-      this._drawBlob(g, this.AW * 0.5 * S, this.AH * 0.42 * S, false, 1, 1)
+      this._drawBlob(g, this.AW * 0.5 * S, this.AH * 0.15 * S, false, 1, 1)
     } else if (this.state === STATE.GAMEOVER) {
       // Compose the dead blob high on the screen so it sits ABOVE the GAME OVER
       // text (never behind it), rather than wherever it happened to hit.
