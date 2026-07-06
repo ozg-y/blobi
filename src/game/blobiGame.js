@@ -55,12 +55,12 @@ const TUNING = {
   blobBaseSpeed: 0.225, // fraction of art-height per second (a bit quicker)
   speedRampPerSec: 0.012, // speed climbs slowly the longer you survive (per second alive)
   speedRampMax: 2.4, // cap the multiplier so it never gets impossible
-  blobDrawR: 0.052, // physics radius (wall bounce / cloak-death boundary)
-  blobHitR: 0.03, // forgiving hitbox for monster contact
+  blobDrawR: 0.046, // physics radius (wall bounce / cloak-death boundary)
+  blobHitR: 0.026, // forgiving hitbox for monster contact
   monsterHitR: 0.015, // monster contact hitbox (kept in step with the smaller sprite)
   // Sprite draw sizes, as a fraction of art-height (the PNGs have transparent margins).
-  blobSpriteH: 0.15,
-  deadSpriteH: 0.16,
+  blobSpriteH: 0.13, // a bit smaller than before, so it sits better next to the tiny beasts
+  deadSpriteH: 0.14,
   monsterSpriteH: 0.055, // small beasts, roughly half of Blobi's height (spec: smaller)
   // Keep monsters well clear of the walls so that after you phase one you still
   // have room to un-cloak and bounce without touching the wall OR re-touching it.
@@ -289,6 +289,16 @@ export default class BlobiGame {
     this.blob.y = clamp(this.blob.y, r, this.AH - r)
   }
 
+  // Is any beast currently inside the blob's body? Uses the drawn body radius so
+  // it matches what the player sees. Powers the "no wall death while phasing" rule.
+  _overlapsAnyMonster() {
+    const r = (TUNING.blobDrawR + TUNING.monsterHitR) * this.AH
+    for (const m of this.monsters) {
+      if (Math.hypot(this.blob.x - m.x, this.blob.y - m.y) < r) return true
+    }
+    return false
+  }
+
   _spawnMonster() {
     if (this.monsters.length >= TUNING.maxMonsters) return
     const mx = TUNING.spawnMargin
@@ -426,12 +436,38 @@ export default class BlobiGame {
     const r = TUNING.blobDrawR * this.AH
 
     if (b.cloaked) {
-      // Invisible: no bouncing. Touching a wall = death (it "leaves" the arena).
-      if (b.x - r <= 0 || b.x + r >= this.AW || b.y - r <= 0 || b.y + r >= this.AH) {
-        b.x = clamp(b.x, r, this.AW - r)
-        b.y = clamp(b.y, r, this.AH - r)
-        this._die()
-        return
+      // Invisible: normally no bouncing, and touching a wall = death (it "leaves"
+      // the arena). EXCEPTION for fairness: if the blob is still overlapping a
+      // beast (mid-phase), it must not die at the wall before it has cleared that
+      // beast, otherwise a beast near a wall would be an unavoidable death. While
+      // phasing, the wall bounces the blob back into the arena instead of killing
+      // it, so it can finish passing the beast and then un-cloak in open space.
+      const hitLeft = b.x - r <= 0
+      const hitRight = b.x + r >= this.AW
+      const hitTop = b.y - r <= 0
+      const hitBot = b.y + r >= this.AH
+      if (hitLeft || hitRight || hitTop || hitBot) {
+        if (this._overlapsAnyMonster()) {
+          if (hitLeft) {
+            b.x = r
+            b.vx = Math.abs(b.vx)
+          } else if (hitRight) {
+            b.x = this.AW - r
+            b.vx = -Math.abs(b.vx)
+          }
+          if (hitTop) {
+            b.y = r
+            b.vy = Math.abs(b.vy)
+          } else if (hitBot) {
+            b.y = this.AH - r
+            b.vy = -Math.abs(b.vy)
+          }
+        } else {
+          b.x = clamp(b.x, r, this.AW - r)
+          b.y = clamp(b.y, r, this.AH - r)
+          this._die()
+          return
+        }
       }
     } else {
       // Visible: classic wall bounce, preserving speed, with a squash pulse.

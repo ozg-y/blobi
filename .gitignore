@@ -21,3 +21,7 @@ npm-debug.log*
 
 # local, machine-specific Claude Code settings
 .claude/settings.local.json
+
+# one-off single-file preview build (not committed)
+dist-single/
+vite.singlefile.config.js
