@@ -52,33 +52,34 @@ const COLORS = {
 // ---- Tuning knobs (spec section 9): everything balance-able lives here -----
 const TUNING = {
   // Speeds/sizes are fractions of the art-space HEIGHT so they scale with the screen.
-  blobBaseSpeed: 0.2, // fraction of art-height per second (nudged up a touch)
+  blobBaseSpeed: 0.225, // fraction of art-height per second (a bit quicker)
   speedRampPerSec: 0.012, // speed climbs slowly the longer you survive (per second alive)
   speedRampMax: 2.4, // cap the multiplier so it never gets impossible
   blobDrawR: 0.052, // physics radius (wall bounce / cloak-death boundary)
   blobHitR: 0.03, // forgiving hitbox for monster contact
-  monsterHitR: 0.024, // monster contact hitbox (kept in step with the smaller sprite)
+  monsterHitR: 0.015, // monster contact hitbox (kept in step with the smaller sprite)
   // Sprite draw sizes, as a fraction of art-height (the PNGs have transparent margins).
   blobSpriteH: 0.15,
   deadSpriteH: 0.16,
-  monsterSpriteH: 0.11, // clearly smaller than Blobi (spec: beasts are smaller)
+  monsterSpriteH: 0.055, // small beasts, roughly half of Blobi's height (spec: smaller)
   // Keep monsters well clear of the walls so that after you phase one you still
   // have room to un-cloak and bounce without touching the wall OR re-touching it.
   spawnMargin: 0.28, // >= 28% from every edge
   spawnTelegraph: 0.28, // seconds of pop-in
-  // Several beasts share the screen at once. Their count drifts between the min
+  // A little swarm shares the screen at once. Their count drifts between the min
   // and max as older ones wander off (each after a randomized lifetime) and new
-  // ones trickle in, so you usually face 2-4 at a time.
-  minMonsters: 2, // never fewer than this on screen
-  maxMonsters: 4, // never more than this on screen
+  // ones trickle in, so you usually face 3-6 at a time.
+  minMonsters: 3, // never fewer than this on screen
+  maxMonsters: 6, // never more than this on screen
   monsterLifeMin: 3.0, // an ignored beast wanders off after a random time in this range
   monsterLifeMax: 5.5,
-  spawnInterval: 0.9, // beat between adding beasts while under the max
-  refillInterval: 0.25, // faster top-up when below the minimum
-  // Separations are a fraction of art-height; kept modest so up to 4 beasts fit
-  // in the narrow portrait arena while never stacking on the blob or each other.
-  monsterGap: 0.14, // min separation between beasts
-  spawnClearOfBlob: 0.13, // never spawn a beast on top of the blob (reaction room)
+  spawnInterval: 0.65, // beat between adding beasts while under the max
+  refillInterval: 0.2, // faster top-up when below the minimum
+  // Separations are a fraction of art-height; small now that the beasts are tiny,
+  // so up to 6 fit in the narrow portrait arena without stacking on the blob or
+  // each other.
+  monsterGap: 0.1, // min separation between beasts
+  spawnClearOfBlob: 0.11, // never spawn a beast on top of the blob (reaction room)
   shakeTime: 0.5, // seconds of screen shake on death
   shakeMag: 5, // art-pixels of shake amplitude
   gameOverLockout: 0.6, // seconds before a retry tap is accepted
